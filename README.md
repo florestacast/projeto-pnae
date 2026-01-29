@@ -116,12 +116,12 @@ pip install pandas reportlab openpyxl pillow
    projeto_venda.xlsx
    cabecalho.png
    marca_dagua.png
-   projeto_venda2.py
+   projeto_venda.py
    ```
 
 2. **Execute o script:**
    ```bash
-   python projeto_venda2.py
+   python projeto_venda.py
    ```
 
 3. **Resultado:**
