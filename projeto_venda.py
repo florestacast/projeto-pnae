@@ -12,7 +12,7 @@ DB_CONFIG = {
     'port': int(os.getenv('DB_PORT', 5433)),
     'database': os.getenv('DB_NAME', 'florestacast'),
     'user': os.getenv('DB_USER', 'florestacast'),
-    'password': os.getenv('DB_PASS', '')
+    'password': '5934'
 }
 
 ARQUIVO_EXCEL = r'D:\Meu Drive\Trabalho\Floresta_cast\Clientes\Luzinia\Envelope\Projeto\projeto_venda.xlsx'
@@ -23,7 +23,7 @@ def conectar_banco():
         conn = psycopg2.connect(**DB_CONFIG)
         return conn
     except Exception as e:
-        print(f'Erro: {e}')
+        print(f'Erro de conexao: {e}')
         exit(1)
 
 def limpar_valor(valor, tipo):
@@ -31,10 +31,15 @@ def limpar_valor(valor, tipo):
         return None
     if isinstance(valor, (int, float)):
         return valor
-    valor_str = str(valor).strip()
+    try:
+        valor_str = str(valor).strip()
+    except:
+        return None
+    
     if tipo == 'quantidade':
         match = re.search(r'(\d+)', valor_str)
         return int(match.group(1)) if match else 0
+    
     if tipo == 'preco' or tipo == 'total':
         valor_limpo = re.sub(r'[^\d,.]', '', valor_str)
         valor_limpo = valor_limpo.replace('.', '').replace(',', '.')
@@ -42,46 +47,61 @@ def limpar_valor(valor, tipo):
             return float(valor_limpo)
         except:
             return 0.0
+    
     return valor_str
 
 def importar_dados_excel():
     try:
-        workbook = openpyxl.load_workbook(ARQUIVO_EXCEL)
+        workbook = openpyxl.load_workbook(ARQUIVO_EXCEL, data_only=True)
         planilha = workbook.active
         print(f'Lendo: {planilha.title}')
         print('=' * 80)
+        
         conn = conectar_banco()
         cur = conn.cursor()
+        
         dados = []
         for linha_idx in range(2, planilha.max_row + 1):
-            itens = limpar_valor(planilha[f'A{linha_idx}'].value, 'quantidade')
-            produto = str(planilha[f'B{linha_idx}'].value or '').strip()
-            unidade = str(planilha[f'C{linha_idx}'].value or '').strip()
-            quantidade = limpar_valor(planilha[f'D{linha_idx}'].value, 'quantidade')
-            preco = limpar_valor(planilha[f'E{linha_idx}'].value, 'preco')
-            total = limpar_valor(planilha[f'F{linha_idx}'].value, 'total')
-            sazonalidade = str(planilha[f'G{linha_idx}'].value or '').strip()
-            status_alimentos = str(planilha[f'H{linha_idx}'].value or '').strip()
-            if produto:
-                dados.append((PROJETO_ID, itens, produto, unidade, quantidade, preco, total, sazonalidade, status_alimentos))
+            try:
+                itens = limpar_valor(planilha[f'A{linha_idx}'].value, 'quantidade')
+                produto = str(planilha[f'B{linha_idx}'].value or '').strip()
+                unidade = str(planilha[f'C{linha_idx}'].value or '').strip()
+                quantidade = limpar_valor(planilha[f'D{linha_idx}'].value, 'quantidade')
+                preco = limpar_valor(planilha[f'E{linha_idx}'].value, 'preco')
+                total = limpar_valor(planilha[f'F{linha_idx}'].value, 'total')
+                sazonalidade = str(planilha[f'G{linha_idx}'].value or '').strip()
+                status_alimentos = str(planilha[f'H{linha_idx}'].value or '').strip()
+                
+                if produto:
+                    dados.append((PROJETO_ID, itens, produto, unidade, quantidade, preco, total, sazonalidade, status_alimentos))
+            except Exception as e:
+                print(f'Erro na linha {linha_idx}: {e}')
+                continue
+        
         if dados:
             sql = 'INSERT INTO alimentos (projeto_id, itens, produto, unidade, quantidade, preco, total, sazonalidade, status_alimentos) VALUES %s'
             execute_values(cur, sql, dados)
             conn.commit()
-            print(f'✓ {len(dados)} linhas importadas!')
-        print('\nRELATÓRIO:')
+            print(f'OK: {len(dados)} linhas importadas!')
+        
+        print('\nRELATORIO:')
         cur.execute('SELECT COUNT(*) FROM alimentos WHERE projeto_id = %s', (PROJETO_ID,))
         print(f'Total: {cur.fetchone()[0]} itens')
+        
         cur.execute('SELECT SUM(total) FROM alimentos WHERE projeto_id = %s', (PROJETO_ID,))
         valor = cur.fetchone()[0] or 0
         print(f'Valor: R\$ {valor:,.2f}')
+        
         cur.close()
         conn.close()
         workbook.close()
+        
     except Exception as e:
         print(f'Erro: {e}')
+        import traceback
+        traceback.print_exc()
         exit(1)
 
 if __name__ == '__main__':
     importar_dados_excel()
-    print('Concluído!')
+    print('OK!')
